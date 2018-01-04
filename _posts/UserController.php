@@ -84,4 +84,108 @@ class UserController extends Controller
         die;
         return view('home.profile', ['res' => $res]);
     }
+
+    public
+    static function getGroupOrderList($activity_id, $activity_type, $page, $keywords = '', $status = 0)
+    {
+        $where = [
+            'activity_id' => $activity_id,
+            'is_del' => 0,
+//            'status' => ['neq', 10]
+        ];
+        $page_size = 15;
+        $offset = ($page - 1) * $page_size;
+
+        if ($keywords) {
+            //orderid  name
+            $where['orderid|name'] = ['like', '%' . $keywords . '%'];
+        }
+
+        $order_status = ['全部', '待支付', '待领取', '完成', '拼团中', '已成团', '已付全款', 10 => '已退款'];
+        $purchase_status = ['拼团中', '已成团'];
+        if ($status) {
+            if ($status == 4) {
+                //拼团中
+                $where['purchase_status'] = 0;
+            } elseif ($status == 5) {
+                $where['purchase_status'] = 1;
+            } else if ($status == 6) {
+                $where['price'] = ['exp', ' = paid'];
+            } else {
+                $where['status'] = $status;
+            }
+        }
+
+        $db = Db::name('activity_order');
+        $data = $db->where($where)->limit($offset, $page_size)->order('pid desc')->group('pid,id')->select();
+
+        $data_info = [];
+        $data_extra = [];
+        $new_data = [];
+        $count = 0;
+        if ($data) {
+            foreach ($data as $k => $v) {
+                $data_info[$k] = [
+                    'orderid' => $v['orderid'],
+                    'status' => $status ? $order_status[$status] : $purchase_status[$v['purchase_status']],
+                    'name' => $v['name'],
+                    'phone_no' => $v['phone_no'],
+                    'price' => $v['price'],
+                    'paid' => $v['paid'],
+                    'pid' => $v['pid'],
+                    'is_tuanzhang' => $v['is_tuanzhang'],
+                    'debt' => $v['price'] - $v['paid'],
+                    'desc' => $v['desc'],
+                    'id' => $v['id']
+                ];
+            }
+            $count = $db->where($where)->count();
+
+            foreach ($data_info as $v) {
+                if ($v['is_tuanzhang']) {//如果是团长，找到下面的小弟
+                    foreach ($data_info as $v1) {
+                        if ($v['pid'] == $v1['pid']) {//找到了
+                            if (!array_key_exists('children', $v)) {//用一个数组保存小弟
+                                $v['children'] = [];
+                            }
+                            if ($v1['is_tuanzhang'] != 1) {//排除自己
+                                $v['children'][] = $v1;
+                            }
+                        }
+                    }
+                    $new_data[] = $v;
+                }
+            }
+
+            /*foreach ($new_data as &$v1) {
+                if (!array_key_exists('children',$v1)) {
+                    $v1['children'] = [];
+                }
+            }
+            unset($v1);*/
+            /* foreach ($data_info as $v) {
+                 if ($v['is_tuanzhang']) {
+                     foreach ($data_info as $v1) {
+                         if ($v['pid'] == $v1['pid']) {
+                             $data_extra[$v['pid']][] = $v1;
+                         }
+                     }
+                 }
+             }
+             $keys = array_keys($data_extra);
+             rsort($keys);
+
+             foreach ($keys as $v) {
+                 array_push($new_data, $data_extra[$v]);
+             }
+             unset($data_extra, $data_info);*/
+
+        }
+        $res['data_list'] = $new_data;
+        $res['page_data']['count'] = $count;
+        $res['page_data']['rows_num'] = $page_size;
+        $res['page_data']['page'] = $page;
+
+        return msg(0, 'success', $res);
+    }
 }
