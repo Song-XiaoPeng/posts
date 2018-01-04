@@ -17,7 +17,18 @@
     </template>
   </child>
 
-
+  <scope-component2>
+    <template scope="props">
+      <p>{{props.text}}</p>
+    </template>
+  </scope-component2>
+  <hr>
+  <child-component>
+    <template scope="props">
+      <span>aaa</span>
+      <!--<p>{{props.text}}</p>-->
+    </template>
+  </child-component>
 
 </div>
 <script>
@@ -50,7 +61,24 @@
         {text:'实例6'}
       ]
 
+    },
+
+    components:{
+
+      'scope-component2':{
+        template:'<div><p>this is a child</p><slot text="this info from child"></slot></div>'
+
+      }
+
     }
+
+/*
+<scope-component2>
+    <template scope="props">
+    <p>{{props.text}}</p>
+  </template>
+  </scope-component2>
+  */
 
   })
 </script>
