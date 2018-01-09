@@ -188,4 +188,149 @@ class UserController extends Controller
 
         return msg(0, 'success', $res);
     }
+
+    //点亮图标设置
+    public function add_light($params)
+    {
+        if (empty($params['activity_id']) || empty($params['name']) || empty($params['status']) || empty($params['share_range']) || empty($params['pic_num']) || empty($params['gift_pic'])) {
+            return msg(1, '参数错误');
+        }
+
+        $activity_id = $params['activity_id'];
+
+        $light = [
+            'activity_id' => $activity_id,                //活动id
+            'name' => $params['name'],
+            'status' => $params['status'],                //是否启用
+            'share_range' => $params['share_range'],      //分享范围 0朋友圈 1好友、群 2朋友圈、好友、群
+            'pic_num' => $params['pic_num'],              //点亮图标个数
+            'gift_pic' => $params['gift_pic'],         //礼物图片
+            'createtime' => time(),
+        ];
+
+        Db::startTrans();//开启事务
+        try {
+            $exist = Db::name('activity_setting_icon')->where('activity_id', $activity_id)->find();
+            $old_icons = [];
+            $new_icons = [];
+            if (!$exist) {
+                $insert_id = Db::name('activity_setting_icon')->insertGetId($light);
+                if (!$insert_id) throw new Exception('图标设置失败');
+            } else {
+                Db::name('activity_setting_icon')->where('activity_id', $activity_id)->update($light);
+                $insert_id = $exist['id'];
+                //找到所有旧图标
+                $old_img = Db::name('activity_setting_img')->where('activity_id', $activity_id)->select();
+                $old_icons = array_column($old_img, 'icons', 'icon_id');//[[],[],[]]老的
+            }
+            if (!empty($params['icons'])) {
+                $all_data = [];
+                $icons = json_decode($params['icons'], true);
+                foreach ($icons as $k => $v) {
+                    $i = json_encode(['dark' => $v['dark'], 'light' => $v['light']]);
+                    if (in_array($i, $old_icons)) {
+                        continue;
+                    }
+                    $new_icons[] = $i;//新的[[],[],[],[]]
+                    $arr = [
+                        'icons' => $i,
+                        'sort' => $v['sort'],
+                        'activity_id' => $activity_id,
+                        'icon_id' => $insert_id
+                    ];
+                    $all_data[] = $arr;
+                }
+                $diff2 = array_diff($old_icons, $new_icons);//delete
+                Db::name('activity_setting_img')->insertAll($all_data);//批量添加
+                //删除在老的但不在新的数据
+                foreach ($diff2 as $v) {
+                    Db::name('activity_setting_img')->where('icons', $v)->delete();
+                }
+            }
+
+            Db::commit();//事务提交
+            return msg(0, '图标设置成功');
+        } catch (\Exception $e) {
+            Db::rollback();//事务回滚
+            return msg(1, $e->getMessage());
+        }
+    }
+
+    //点亮图标设置
+    public function add_light1($params)
+    {
+        if (empty($params['activity_id']) || empty($params['name']) || empty($params['status']) || empty($params['share_range']) || empty($params['pic_num']) || empty($params['gift_pic'])) {
+            return msg(1, '参数错误');
+        }
+
+        $activity_id = $params['activity_id'];
+
+        $light = [
+            'activity_id' => $activity_id,                //活动id
+            'name' => $params['name'],
+            'status' => $params['status'],                //是否启用
+            'share_range' => $params['share_range'],      //分享范围 0朋友圈 1好友、群 2朋友圈、好友、群
+            'pic_num' => $params['pic_num'],              //点亮图标个数
+            'gift_pic' => $params['gift_pic'],         //礼物图片
+            'createtime' => time(),
+        ];
+        $new_count = $params['pic_num'];//3
+        Db::startTrans();//开启事务
+        try {
+            $exist = Db::name('activity_setting_icon')->where('activity_id', $activity_id)->find();
+            $old_icons = [];
+            $old_ids = [];
+            if (!$exist) {
+                $insert_id = Db::name('activity_setting_icon')->insertGetId($light);
+                if (!$insert_id) throw new Exception('图标设置失败');
+            } else {
+                Db::name('activity_setting_icon')->where('activity_id', $activity_id)->update($light);
+                $insert_id = $exist['id'];
+                //找到所有旧图标
+                $old_data = Db::name('activity_setting_img')->where('activity_id', $activity_id)->select();
+                $old_icons = array_column($old_data, 'icons');
+                $old_ids = array_column($old_data, 'id');
+            }
+            if (!empty($params['icons'])) {
+//                $new_icon = json_decode($params['icons'], true);
+                $new_icon = $params['icons'];
+                $count = count($old_ids);//5
+                if (in_array($new_icon, $old_icons)) {
+                    if ($count > $new_count) {
+                        $del_ids = array_splice($old_ids, $new_count);
+                        Db::name('activity_setting_img')->where(['id' => ['in', $del_ids]])->delete();
+                    }
+                    if ($count < $new_count) {//3,5
+                        $idx = $count;
+                        for ($i = 1; $i <= $new_count - $count; $i++) {
+                            $arr[] = [
+                                'icons' => $new_icon,
+                                'sort' => $idx++,
+                                'activity_id' => $activity_id,
+                                'icon_id' => $insert_id
+                            ];
+                        }
+                        Db::name('activity_setting_img')->insertAll($arr);
+                    }
+                } else {
+                    for ($i = 1; $i <= $new_count; $i++) {
+                        $arr[] = [
+                            'icons' => $new_icon,
+                            'sort' => $i,
+                            'activity_id' => $activity_id,
+                            'icon_id' => $insert_id
+                        ];
+                    }
+                    Db::name('activity_setting_img')->where('activity_id', $activity_id)->delete();
+                    Db::name('activity_setting_img')->insertAll($arr);
+                }
+            }
+
+            Db::commit();//事务提交
+            return msg(0, '图标设置成功');
+        } catch (\Exception $e) {
+            Db::rollback();//事务回滚
+            return msg(1, $e->getMessage());
+        }
+    }
 }
